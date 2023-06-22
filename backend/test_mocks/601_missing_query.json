@@ -1,0 +1,8 @@
+{
+    "success": false,
+    "error": {
+        "code": 601,
+        "type": "missing_query",
+        "info": "You failed to provide a query"
+    }
+}

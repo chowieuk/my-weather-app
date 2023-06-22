@@ -1,0 +1,8 @@
+{
+    "success": false,
+    "error": {
+        "code": 602,
+        "type": "no_results",
+        "info": "There are no results for the location you provided"
+    }
+}
