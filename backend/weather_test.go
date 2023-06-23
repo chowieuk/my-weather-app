@@ -30,13 +30,6 @@ func TestWeatherStackManager_GetWeather(t *testing.T) {
 	// Get the WEATHER_KEY from the environment variables
 	WEATHER_KEY := os.Getenv("WEATHER_KEY")
 
-	// // grab example JSON response from file
-	// file, err := os.Open("./test_mocks/weatherCurrentResponse.json")
-	// if err != nil {
-	// 	panic(err)
-	// }
-	// defer file.Close()
-
 	// create a new server serving the appropriate mock JSON
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		query := r.URL.Query()
@@ -101,6 +94,7 @@ func TestWeatherStackManager_GetWeather(t *testing.T) {
 				},
 				Current: Current{
 					Temperature: 19,
+					Fahrenheit:  66,
 				},
 			},
 			wantErr: false,
@@ -189,5 +183,17 @@ func TestWeatherStackManager_GetWeather(t *testing.T) {
 				t.Errorf("WeatherStackManager.GetWeather() = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestCelsiusToFahrenheit(t *testing.T) {
+	result := CelsiusToFahrenheit(0)
+	if result != 32 {
+		t.Errorf("Expected 32, but got %d", result)
+	}
+
+	result = CelsiusToFahrenheit(100)
+	if result != 212 {
+		t.Errorf("Expected 212, but got %d", result)
 	}
 }

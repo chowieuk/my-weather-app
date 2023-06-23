@@ -30,6 +30,7 @@ type Location struct {
 
 type Current struct {
 	Temperature int `json:"temperature"`
+	Fahrenheit  int `json:"fahrenheit"`
 }
 
 type ApiErrorResponse struct {
@@ -63,7 +64,7 @@ func (wsm *WeatherStackManager) GetWeather(location string) (*WeatherApiResponse
 		if err != nil {
 			return nil, err
 		}
-		log.Print("error: ", &apiErrorResponse)
+		log.Printf("%+v\n", &apiErrorResponse)
 		return nil, fmt.Errorf("API error occurred: code=%d, type=%s, info=%s", apiErrorResponse.Error.Code, apiErrorResponse.Error.Type, apiErrorResponse.Error.Info)
 	}
 
@@ -73,8 +74,14 @@ func (wsm *WeatherStackManager) GetWeather(location string) (*WeatherApiResponse
 		return nil, err
 	}
 
-	log.Print(&weatherResponse)
+	weatherResponse.Current.Fahrenheit = CelsiusToFahrenheit(weatherResponse.Current.Temperature)
+
+	log.Printf("%+v\n", &weatherResponse)
 	return &weatherResponse, nil
+}
+
+func CelsiusToFahrenheit(celsius int) int {
+	return int(float64(celsius)*1.8 + 32)
 }
 
 func main() {
@@ -87,6 +94,7 @@ func main() {
 
 	// Get the WEATHER_KEY from the environment variables
 	WEATHER_KEY := os.Getenv("WEATHER_KEY")
+
 	wsm := WeatherStackManager{
 		BaseUrl:     "http://api.weatherstack.com/",
 		WEATHER_KEY: WEATHER_KEY,
