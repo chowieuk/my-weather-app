@@ -115,7 +115,7 @@ func (wsm *WeatherStackManager) GetAstro(location string) (AstroResponse, error)
 	response, err := wsm.Client.Get(url)
 	if err != nil {
 		log.Println(err)
-		return AstroResponse{}, err
+		return AstroResponse{}, fmt.Errorf("failed to send request to Weather API: %w", err)
 	}
 
 	defer response.Body.Close()
@@ -123,7 +123,7 @@ func (wsm *WeatherStackManager) GetAstro(location string) (AstroResponse, error)
 	body, err := ioutil.ReadAll(response.Body)
 	if err != nil {
 		log.Println(err)
-		return AstroResponse{}, err
+		return AstroResponse{}, fmt.Errorf("failed to read response body: %w", err)
 	}
 
 	if response.StatusCode != http.StatusOK {
@@ -141,13 +141,13 @@ func (wsm *WeatherStackManager) GetAstro(location string) (AstroResponse, error)
 	err = json.Unmarshal(body, &forecastResponse)
 	if err != nil {
 		log.Println(err)
-		return AstroResponse{}, err
+		return AstroResponse{}, fmt.Errorf("failed to unmarshal forecast response: %w", err)
 	}
 
 	expiryTime, err := wsm.TimeManager.ComputeExpiryTime(forecastResponse.Location.LocalTime)
 	if err != nil {
 		log.Println(err)
-		return AstroResponse{}, err
+		return AstroResponse{}, fmt.Errorf("failed to compute expiry time: %w", err)
 	}
 
 	// Extract the date from the forecast map (should be only one key-value pair)
