@@ -119,6 +119,7 @@ func (wsm *WeatherStackManager) GetAstro(location string, date string) (Astro, e
 	url := fmt.Sprintf("%s/forecast?access_key=%s&query=%s", wsm.BaseUrl, wsm.WEATHER_KEY, location)
 	response, err := wsm.Client.Get(url)
 	if err != nil {
+		log.Println(err)
 		return Astro{}, err
 	}
 
@@ -126,6 +127,7 @@ func (wsm *WeatherStackManager) GetAstro(location string, date string) (Astro, e
 
 	body, err := ioutil.ReadAll(response.Body)
 	if err != nil {
+		log.Println(err)
 		return Astro{}, err
 	}
 
@@ -133,6 +135,7 @@ func (wsm *WeatherStackManager) GetAstro(location string, date string) (Astro, e
 		var apiErrorResponse ApiErrorResponse
 		err = json.Unmarshal(body, &apiErrorResponse)
 		if err != nil {
+			log.Println(err)
 			return Astro{}, err
 		}
 		log.Printf("%+v\n", &apiErrorResponse)
@@ -142,6 +145,7 @@ func (wsm *WeatherStackManager) GetAstro(location string, date string) (Astro, e
 	var forecastResponse WeatherApiResponse
 	err = json.Unmarshal(body, &forecastResponse)
 	if err != nil {
+		log.Println(err)
 		return Astro{}, err
 	}
 
@@ -173,6 +177,7 @@ func AstroHandler(w http.ResponseWriter, r *http.Request, wm WeatherManager) {
 	// Get the astro data
 	astroData, err := wm.GetAstro(location, date)
 	if err != nil {
+		log.Println(err)
 		http.Error(w, "Failed to get astro data", http.StatusInternalServerError)
 		return
 	}
@@ -181,6 +186,7 @@ func AstroHandler(w http.ResponseWriter, r *http.Request, wm WeatherManager) {
 	// Convert the astroData to JSON before sending it
 	astroDataJson, err := json.Marshal(astroData)
 	if err != nil {
+		log.Println(err)
 		http.Error(w, "Failed to convert astro data to JSON", http.StatusInternalServerError)
 		return
 	}
@@ -210,6 +216,6 @@ func main() {
 	http.HandleFunc("/astro", func(w http.ResponseWriter, r *http.Request) {
 		AstroHandler(w, r, &wsm)
 	})
-
+	fmt.Println("Server listening on port 8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
