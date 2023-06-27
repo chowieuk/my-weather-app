@@ -176,28 +176,28 @@ func makeKey(location string, date string) string {
 }
 
 func AstroHandler(w http.ResponseWriter, r *http.Request, wm WeatherManager) {
-	// Parse location and date from request's query parameters
+	// Parse location from request's query parameters
 	location := r.URL.Query().Get("location")
 
 	if location == "" {
-		http.Error(w, "Missing 'location' query parameter", http.StatusBadRequest)
+		log.Println("Error: 'location' query parameter is missing in the incoming request.")
+		http.Error(w, "Error: 'location' query parameter is missing. Please provide a valid location.", http.StatusBadRequest)
 		return
 	}
 
 	// Get the astro data
 	astroData, err := wm.GetAstro(location)
 	if err != nil {
-		log.Println(err)
-		http.Error(w, "Failed to get astro data", http.StatusInternalServerError)
+		log.Printf("Error fetching astro data for location '%s': %v", location, err)
+		http.Error(w, fmt.Sprintf("Error: failed to get astro data for location '%s'. Please try again later.", location), http.StatusInternalServerError)
 		return
 	}
 
-	// Send the astro data as response
 	// Convert the astroData to JSON before sending it
 	astroDataJson, err := json.Marshal(astroData)
 	if err != nil {
-		log.Println(err)
-		http.Error(w, "Failed to convert astro data to JSON", http.StatusInternalServerError)
+		log.Printf("Error converting astro data to JSON for location '%s': %v", location, err)
+		http.Error(w, "Error: failed to process astro data. Please try again later.", http.StatusInternalServerError)
 		return
 	}
 
