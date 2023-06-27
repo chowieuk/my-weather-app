@@ -1,27 +1,64 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"reflect"
 	"testing"
+	"time"
+
+	// "time"
 
 	"github.com/joho/godotenv"
 )
 
-type MockWeatherManager struct{}
+type MockWeatherManager struct {
+	TimeManager TimeManager
+}
 
-func (mwm *MockWeatherManager) GetAstro(location string, date string) (Astro, error) {
-	return Astro{
-		Sunrise:          "05:07 AM",
-		Sunset:           "09:22 PM",
-		Moonrise:         "06:58 AM",
-		Moonset:          "11:52 PM",
-		MoonPhase:        "Waxing Crescent",
-		MoonIllumination: 3,
+func (mwm *MockWeatherManager) GetAstro(location string) (AstroResponse, error) {
+	return AstroResponse{
+		Date:      mwm.TimeManager.Now().Format("2006-01-02"),
+		ExpiresAt: mwm.TimeManager.Now().Add(time.Hour * 2),
+		AstroData: AstroData{
+			Sunrise:          "05:07 AM",
+			Sunset:           "09:22 PM",
+			Moonrise:         "06:58 AM",
+			Moonset:          "11:52 PM",
+			MoonPhase:        "Waxing Crescent",
+			MoonIllumination: 3},
 	}, nil
+}
+
+type MockTimeManager struct {
+	NowFunc               func() time.Time
+	ComputeExpiryTimeFunc func(localTime string) (time.Time, error)
+}
+
+func (tm *MockTimeManager) Now() time.Time {
+	if tm.NowFunc != nil {
+		return tm.NowFunc()
+	}
+	return time.Now()
+}
+
+func (tm *MockTimeManager) ComputeExpiryTime(localTime string) (time.Time, error) {
+	if tm.ComputeExpiryTimeFunc != nil {
+		return tm.ComputeExpiryTimeFunc(localTime)
+	}
+	// default logic if ComputeExpiryTimeFunc is not set
+	lt, err := time.Parse("2006-01-02 15:04", localTime)
+	if err != nil {
+		return time.Time{}, err
+	}
+
+	nextDay := lt.AddDate(0, 0, 1)
+	expiryTime := time.Date(nextDay.Year(), nextDay.Month(), nextDay.Day(), 0, 0, 0, 0, lt.Location())
+
+	return expiryTime, nil
 }
 
 func TestWeatherStackManager_GetWeather(t *testing.T) {
@@ -30,6 +67,7 @@ func TestWeatherStackManager_GetWeather(t *testing.T) {
 		BaseUrl     string
 		WEATHER_KEY string
 		Client      http.Client
+		TimeManager TimeManager
 	}
 	type args struct {
 		location string
@@ -102,9 +140,10 @@ func TestWeatherStackManager_GetWeather(t *testing.T) {
 			},
 			want: &WeatherApiResponse{
 				Location: Location{
-					Name:    "Vancouver",
-					Country: "Canada",
-					Region:  "British Columbia",
+					Name:      "Vancouver",
+					Country:   "Canada",
+					Region:    "British Columbia",
+					LocalTime: "2023-06-21 16:30",
 				},
 				Current: Current{
 					Temperature: 19,
@@ -187,6 +226,7 @@ func TestWeatherStackManager_GetWeather(t *testing.T) {
 				BaseUrl:     tt.fields.BaseUrl,
 				WEATHER_KEY: tt.fields.WEATHER_KEY,
 				Client:      tt.fields.Client,
+				TimeManager: &DefaultTimeManager{},
 			}
 			got, err := wsm.GetWeather(tt.args.location)
 			if (err != nil) != tt.wantErr {
@@ -217,7 +257,8 @@ func TestWeatherStackManager_GetAstro(t *testing.T) {
 		BaseUrl     string
 		WEATHER_KEY string
 		Client      http.Client
-		Cache       map[string]Astro
+		Cache       map[string]AstroData
+		TimeManager TimeManager
 	}
 	type args struct {
 		location string
@@ -277,7 +318,7 @@ func TestWeatherStackManager_GetAstro(t *testing.T) {
 		name    string
 		fields  fields
 		args    args
-		want    Astro
+		want    AstroResponse
 		wantErr bool
 	}{
 		{
@@ -285,18 +326,38 @@ func TestWeatherStackManager_GetAstro(t *testing.T) {
 			fields: fields{
 				BaseUrl:     server.URL,
 				WEATHER_KEY: WEATHER_KEY,
+				TimeManager: &MockTimeManager{
+					NowFunc: func() time.Time {
+						// return a fixed time for this test case
+						return time.Date(2023, 6, 22, 12, 35, 30, 0, time.UTC)
+					},
+					ComputeExpiryTimeFunc: func(localTime string) (time.Time, error) {
+						// Compute the expiry time based on localTime
+						lt, err := time.Parse("2006-01-02 15:04", localTime)
+						if err != nil {
+							return time.Time{}, err
+						}
+
+						nextDay := lt.AddDate(0, 0, 1)
+						expiryTime := time.Date(nextDay.Year(), nextDay.Month(), nextDay.Day(), 0, 0, 0, 0, lt.Location())
+
+						return expiryTime, nil
+					},
+				},
 			},
 			args: args{
 				location: "Vancouver",
-				date:     "2023-06-20",
 			},
-			want: Astro{
-				Sunrise:          "05:07 AM",
-				Sunset:           "09:22 PM",
-				Moonrise:         "06:58 AM",
-				Moonset:          "11:52 PM",
-				MoonPhase:        "Waxing Crescent",
-				MoonIllumination: 3,
+			want: AstroResponse{
+				Date:      "2023-06-20",
+				ExpiresAt: time.Date(2023, 6, 22, 0, 0, 0, 0, time.UTC), // based on the MockTimeManager implementation
+				AstroData: AstroData{
+					Sunrise:          "05:07 AM",
+					Sunset:           "09:22 PM",
+					Moonrise:         "06:58 AM",
+					Moonset:          "11:52 PM",
+					MoonPhase:        "Waxing Crescent",
+					MoonIllumination: 3},
 			},
 			wantErr: false,
 		},
@@ -307,9 +368,10 @@ func TestWeatherStackManager_GetAstro(t *testing.T) {
 				BaseUrl:     tt.fields.BaseUrl,
 				WEATHER_KEY: tt.fields.WEATHER_KEY,
 				Client:      tt.fields.Client,
-				Cache:       make(map[string]Astro),
+				Cache:       make(map[string]AstroResponse),
+				TimeManager: tt.fields.TimeManager,
 			}
-			got, err := wsm.GetAstro(tt.args.location, tt.args.date)
+			got, err := wsm.GetAstro(tt.args.location)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("WeatherStackManager.GetForecast() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -375,20 +437,28 @@ func TestWeatherStackManager_CachingBehavior(t *testing.T) {
 	}))
 	defer server.Close()
 
+	fixedTime := time.Date(2023, 6, 27, 22, 00, 00, 0, time.UTC)
+	timeManager := &MockTimeManager{
+		NowFunc: func() time.Time {
+			return fixedTime
+		},
+	}
+
 	wsm := WeatherStackManager{
 		BaseUrl:     server.URL,
 		WEATHER_KEY: WEATHER_KEY,
-		Cache:       make(map[string]Astro),
+		Cache:       make(map[string]AstroResponse),
+		TimeManager: timeManager,
 	}
 
 	// Call GetAstro to populate the cache
-	firstAstro, err := wsm.GetAstro("Vancouver", "2023-06-20")
+	firstAstro, err := wsm.GetAstro("Vancouver")
 	if err != nil {
 		t.Fatalf("Unexpected error during GetAstro: %v", err)
 	}
 
 	// Call GetAstro again and check that it returns the same data
-	secondAstro, err := wsm.GetAstro("Vancouver", "2023-06-20")
+	secondAstro, err := wsm.GetAstro("Vancouver")
 	if err != nil {
 		t.Fatalf("Unexpected error during second GetAstro: %v", err)
 	}
@@ -402,30 +472,99 @@ func TestWeatherStackManager_CachingBehavior(t *testing.T) {
 	}
 
 	// Verify the cache directly
-	cacheKey := "Vancouver:2023-06-20"
+	cacheKey := fmt.Sprintf("Vancouver:%s", fixedTime.Format("2006-01-02"))
 	cachedData, found := wsm.Cache[cacheKey]
 	if !found {
 		t.Errorf("No data found in cache for key: %s", cacheKey)
 	}
 
 	// Compare cachedAstro with the expected data
-	expectedAstro := Astro{
-		Sunrise:          "05:07 AM",
-		Sunset:           "09:22 PM",
-		Moonrise:         "06:58 AM",
-		Moonset:          "11:52 PM",
-		MoonPhase:        "Waxing Crescent",
-		MoonIllumination: 3,
+	expectedAstro := AstroResponse{
+		Date:      "2023-06-20",
+		ExpiresAt: time.Date(2023, 6, 22, 0, 0, 0, 0, time.UTC), // based on the MockTimeManager implementation
+		AstroData: AstroData{
+			Sunrise:          "05:07 AM",
+			Sunset:           "09:22 PM",
+			Moonrise:         "06:58 AM",
+			Moonset:          "11:52 PM",
+			MoonPhase:        "Waxing Crescent",
+			MoonIllumination: 3,
+		},
 	}
 
 	if !reflect.DeepEqual(cachedData, expectedAstro) {
 		t.Errorf("Cached data is not as expected. Got %v, want %v", cachedData, expectedAstro)
 	}
+
+	wsm = WeatherStackManager{
+		BaseUrl:     server.URL,
+		WEATHER_KEY: WEATHER_KEY,
+		Cache:       make(map[string]AstroResponse),
+		TimeManager: &MockTimeManager{
+			NowFunc: func() time.Time {
+				return time.Now()
+			},
+			ComputeExpiryTimeFunc: func(localTime string) (time.Time, error) {
+				// Compute the expiry time based on localTime
+				lt, err := time.Parse("2006-01-02 15:04", localTime)
+				if err != nil {
+					return time.Time{}, err
+				}
+
+				nextDay := lt.AddDate(0, 0, 1)
+				expiryTime := time.Date(nextDay.Year(), nextDay.Month(), nextDay.Day(), 0, 0, 0, 0, time.UTC)
+
+				// Return a time in the past
+				return expiryTime.Add(-time.Hour), nil
+			},
+		},
+	}
+
+	// Call GetAstro to populate the cache
+	thirdAstro, err := wsm.GetAstro("Vancouver")
+	if err != nil {
+		t.Fatalf("Unexpected error during third GetAstro: %v", err)
+	}
+
+	// Call GetAstro again and check that it triggers another request (since the cache has expired)
+	fourthAstro, err := wsm.GetAstro("Vancouver")
+	if err != nil {
+		t.Fatalf("Unexpected error during fourth GetAstro: %v", err)
+	}
+
+	// Because the cache is expired, the server should receive a new request, hence increasing the requestCount
+	if requestCount != 2 { // two 2 previous tests each making one request
+		t.Errorf("Expected 2 requests to the server, but got %d", requestCount)
+	}
+
+	// Check that the two responses are the same, despite the cache having been invalidated
+	if !reflect.DeepEqual(thirdAstro, fourthAstro) {
+		t.Errorf("Second GetAstro returned different data: first %v, second %v", thirdAstro, fourthAstro)
+	}
 }
 
 func TestAstroHandler(t *testing.T) {
 
-	mwm := &MockWeatherManager{}
+	mwm := &MockWeatherManager{
+		TimeManager: &MockTimeManager{
+			NowFunc: func() time.Time {
+				// return a fixed time for this test case
+				return time.Date(2023, 6, 27, 22, 00, 00, 0, time.UTC)
+			},
+			ComputeExpiryTimeFunc: func(localTime string) (time.Time, error) {
+				// Compute the expiry time based on localTime
+				lt, err := time.Parse("2006-01-02 15:04", localTime)
+				if err != nil {
+					return time.Time{}, err
+				}
+
+				nextDay := lt.AddDate(0, 0, 1)
+				expiryTime := time.Date(nextDay.Year(), nextDay.Month(), nextDay.Day(), 0, 0, 0, 0, time.UTC)
+
+				return expiryTime, nil
+			},
+		},
+	}
 
 	req, err := http.NewRequest("GET", "/astro?location=Vancouver&date=2023-06-20", nil)
 	if err != nil {
@@ -440,7 +579,7 @@ func TestAstroHandler(t *testing.T) {
 		t.Errorf("handler returned wrong status code: got %v want %v", status, http.StatusOK)
 	}
 
-	expected := `{"sunrise":"05:07 AM","sunset":"09:22 PM","moonrise":"06:58 AM","moonset":"11:52 PM","moon_phase":"Waxing Crescent","moon_illumination":3}`
+	expected := `{"date":"2023-06-27","astro":{"sunrise":"05:07 AM","sunset":"09:22 PM","moonrise":"06:58 AM","moonset":"11:52 PM","moon_phase":"Waxing Crescent","moon_illumination":3},"expires_at":"2023-06-28T00:00:00Z"}`
 	if rr.Body.String() != expected {
 		t.Errorf("handler returned unexpected body: got %v want %v", rr.Body.String(), expected)
 	}
