@@ -12,42 +12,8 @@ import (
 	"github.com/joho/godotenv"
 )
 
-const APIUpdateInterval = 12 * time.Hour
-
-type WeatherStackManager struct {
-	BaseUrl     string
-	WEATHER_KEY string
-	Client      http.Client
-	Cache       map[string]AstroResponse
-	TimeManager TimeManager
-}
-
-type TimeManager interface {
-	Now() time.Time
-	ComputeExpiryTime(localTime string) (time.Time, error)
-}
-
-type DefaultTimeManager struct{}
-
-func (tm *DefaultTimeManager) Now() time.Time {
-	return time.Now()
-}
-
-func (tm *DefaultTimeManager) ComputeExpiryTime(localTime string) (time.Time, error) {
-	parsedTime, err := time.Parse("2006-01-02 15:04", localTime)
-	if err != nil {
-		return time.Time{}, err
-	}
-
-	nextDay := parsedTime.AddDate(0, 0, 1)
-	expiryTime := time.Date(nextDay.Year(), nextDay.Month(), nextDay.Day(), 0, 0, 0, 0, parsedTime.Location())
-
-	return expiryTime, nil
-}
-
 type WeatherApiResponse struct {
 	Location Location            `json:"location"`
-	Current  Current             `json:"current"`
 	Forecast map[string]Forecast `json:"forecast"`
 }
 
@@ -56,11 +22,6 @@ type Location struct {
 	Country   string `json:"country"`
 	Region    string `json:"region"`
 	LocalTime string `json:"localtime"`
-}
-
-type Current struct {
-	Temperature int `json:"temperature"`
-	Fahrenheit  int `json:"fahrenheit"`
 }
 
 type Forecast struct {
@@ -101,58 +62,49 @@ type ApiError struct {
 	Info string `json:"info"`
 }
 
-func makeKey(location string, date string) string {
-	return fmt.Sprintf("%s:%s", location, date)
+type TimeManager interface {
+	Now() time.Time
+	ComputeExpiryTime(localTime string) (time.Time, error)
 }
 
-func (wsm *WeatherStackManager) GetWeather(location string) (*WeatherApiResponse, error) {
-	url := fmt.Sprintf("%s/current?access_key=%s&query=%s", wsm.BaseUrl, wsm.WEATHER_KEY, location)
-	response, err := wsm.Client.Get(url)
+type DefaultTimeManager struct{}
+
+func (tm *DefaultTimeManager) Now() time.Time {
+	return time.Now()
+}
+
+func (tm *DefaultTimeManager) ComputeExpiryTime(localTime string) (time.Time, error) {
+	parsedTime, err := time.Parse("2006-01-02 15:04", localTime)
 	if err != nil {
-		return nil, err
+		return time.Time{}, err
 	}
 
-	defer response.Body.Close()
+	nextDay := parsedTime.AddDate(0, 0, 1)
+	expiryTime := time.Date(nextDay.Year(), nextDay.Month(), nextDay.Day(), 0, 0, 0, 0, parsedTime.Location())
 
-	body, err := ioutil.ReadAll(response.Body)
-	if err != nil {
-		return nil, err
-	}
+	return expiryTime, nil
+}
 
-	if response.StatusCode != http.StatusOK {
-		var apiErrorResponse ApiErrorResponse
-		err = json.Unmarshal(body, &apiErrorResponse)
-		if err != nil {
-			return nil, err
-		}
-		log.Printf("%+v\n", &apiErrorResponse)
-		return nil, fmt.Errorf("API error occurred: code=%d, type=%s, info=%s", apiErrorResponse.Error.Code, apiErrorResponse.Error.Type, apiErrorResponse.Error.Info)
-	}
+type WeatherManager interface {
+	GetAstro(location string) (AstroResponse, error)
+}
 
-	var weatherResponse WeatherApiResponse
-	err = json.Unmarshal(body, &weatherResponse)
-	if err != nil {
-		return nil, err
-	}
-
-	weatherResponse.Current.Fahrenheit = CelsiusToFahrenheit(weatherResponse.Current.Temperature)
-
-	log.Printf("%+v\n", &weatherResponse)
-	return &weatherResponse, nil
+type WeatherStackManager struct {
+	BaseUrl     string
+	WEATHER_KEY string
+	Client      http.Client
+	Cache       map[string]AstroResponse
+	TimeManager TimeManager
 }
 
 func (wsm *WeatherStackManager) GetAstro(location string) (AstroResponse, error) {
 
 	// Check the cache first
-	currentDate := time.Now().Format("2006-01-02")
+	currentDate := wsm.TimeManager.Now().Format("2006-01-02")
 	cacheKey := makeKey(location, currentDate)
 
 	if cachedAstroResponse, found := wsm.Cache[cacheKey]; found {
-		return cachedAstroResponse, nil
-	}
-
-	if cachedAstroResponse, found := wsm.Cache[cacheKey]; found {
-		if time.Now().Before(cachedAstroResponse.ExpiresAt) {
+		if wsm.TimeManager.Now().Before(cachedAstroResponse.ExpiresAt) {
 			log.Println("value served from cache", cachedAstroResponse)
 			return cachedAstroResponse, nil
 		}
@@ -219,12 +171,8 @@ func (wsm *WeatherStackManager) GetAstro(location string) (AstroResponse, error)
 	return astroResponse, nil
 }
 
-func CelsiusToFahrenheit(celsius int) int {
-	return int(float64(celsius)*1.8 + 32)
-}
-
-type WeatherManager interface {
-	GetAstro(location string) (AstroResponse, error)
+func makeKey(location string, date string) string {
+	return fmt.Sprintf("%s:%s", location, date)
 }
 
 func AstroHandler(w http.ResponseWriter, r *http.Request, wm WeatherManager) {
