@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -19,10 +20,11 @@ type WeatherApiResponse struct {
 }
 
 type Location struct {
-	Name      string `json:"name"`
-	Country   string `json:"country"`
-	Region    string `json:"region"`
-	LocalTime string `json:"localtime"`
+	Name       string `json:"name"`
+	Country    string `json:"country"`
+	Region     string `json:"region"`
+	LocalTime  string `json:"localtime"`
+	TimeZoneID string `json:"timezone_id"`
 }
 
 type Forecast struct {
@@ -47,9 +49,12 @@ type AstroData struct {
 }
 
 type AstroResponse struct {
-	Date      string    `json:"date"`
-	AstroData AstroData `json:"astro"`
-	ExpiresAt time.Time `json:"expires_at"`
+	Date            string    `json:"date"`
+	LocationName    string    `json:"name"`
+	LocationRegion  string    `json:"region"`
+	LocationCountry string    `json:"country"`
+	AstroData       AstroData `json:"astro"`
+	ExpiresAt       time.Time `json:"expires_at"`
 }
 
 type ApiErrorResponse struct {
@@ -65,7 +70,7 @@ type ApiError struct {
 
 type TimeManager interface {
 	Now() time.Time
-	ComputeExpiryTime(localTime string) (time.Time, error)
+	ComputeExpiryTime(localTime string, timeZoneID string) (time.Time, error)
 }
 
 type DefaultTimeManager struct{}
@@ -74,14 +79,22 @@ func (tm *DefaultTimeManager) Now() time.Time {
 	return time.Now()
 }
 
-func (tm *DefaultTimeManager) ComputeExpiryTime(localTime string) (time.Time, error) {
-	parsedTime, err := time.Parse("2006-01-02 15:04", localTime)
+func (tm *DefaultTimeManager) ComputeExpiryTime(localTime string, timeZoneID string) (time.Time, error) {
+	// Get the location for the given time zone
+	loc, err := time.LoadLocation(timeZoneID)
 	if err != nil {
 		return time.Time{}, err
 	}
 
+	// Parse the local time using the location
+	parsedTime, err := time.ParseInLocation("2006-01-02 15:04", localTime, loc)
+	if err != nil {
+		return time.Time{}, err
+	}
+
+	// Compute the expiry time
 	nextDay := parsedTime.AddDate(0, 0, 1)
-	expiryTime := time.Date(nextDay.Year(), nextDay.Month(), nextDay.Day(), 0, 0, 0, 0, parsedTime.Location())
+	expiryTime := time.Date(nextDay.Year(), nextDay.Month(), nextDay.Day(), 0, 0, 0, 0, loc)
 
 	return expiryTime, nil
 }
@@ -101,15 +114,16 @@ type WeatherStackManager struct {
 func (wsm *WeatherStackManager) GetAstro(location string) (AstroResponse, error) {
 
 	// Check the cache first
-	currentDate := wsm.TimeManager.Now().Format("2006-01-02")
-	cacheKey := makeKey(location, currentDate)
+	now := wsm.TimeManager.Now()
+	currentDate := now.Format("2006-01-02")
+	cacheKey := makeKey(strings.ToLower(location), currentDate)
 
 	if cachedAstroResponse, found := wsm.Cache[cacheKey]; found {
-		if wsm.TimeManager.Now().Before(cachedAstroResponse.ExpiresAt) {
+		if now.Before(cachedAstroResponse.ExpiresAt) {
 			log.Println("value served from cache", cachedAstroResponse)
 			return cachedAstroResponse, nil
 		}
-		log.Printf("cached value for %s has expired\n", location)
+		log.Printf("cached value for %s has expired\n %+v %+v", location, now, cachedAstroResponse.ExpiresAt)
 	}
 
 	url := fmt.Sprintf("%s/forecast?access_key=%s&query=%s", wsm.BaseUrl, wsm.WEATHER_KEY, location)
@@ -145,7 +159,7 @@ func (wsm *WeatherStackManager) GetAstro(location string) (AstroResponse, error)
 		return AstroResponse{}, fmt.Errorf("failed to unmarshal forecast response: %w", err)
 	}
 
-	expiryTime, err := wsm.TimeManager.ComputeExpiryTime(forecastResponse.Location.LocalTime)
+	expiryTime, err := wsm.TimeManager.ComputeExpiryTime(forecastResponse.Location.LocalTime, forecastResponse.Location.TimeZoneID)
 	if err != nil {
 		log.Println(err)
 		return AstroResponse{}, fmt.Errorf("failed to compute expiry time: %w", err)
@@ -161,9 +175,12 @@ func (wsm *WeatherStackManager) GetAstro(location string) (AstroResponse, error)
 	}
 
 	astroResponse := AstroResponse{
-		AstroData: forecast.AstroData,
-		Date:      forecastDate,
-		ExpiresAt: expiryTime,
+		LocationName:    forecastResponse.Location.Name,
+		LocationRegion:  forecastResponse.Location.Region,
+		LocationCountry: forecastResponse.Location.Country,
+		AstroData:       forecast.AstroData,
+		Date:            forecastDate,
+		ExpiresAt:       expiryTime,
 	}
 
 	wsm.Cache[cacheKey] = astroResponse

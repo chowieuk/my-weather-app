@@ -19,8 +19,11 @@ type MockWeatherManager struct {
 
 func (mwm *MockWeatherManager) GetAstro(location string) (AstroResponse, error) {
 	return AstroResponse{
-		Date:      mwm.TimeManager.Now().Format("2006-01-02"),
-		ExpiresAt: mwm.TimeManager.Now().Add(time.Hour * 2),
+		Date:            mwm.TimeManager.Now().Format("2006-01-02"),
+		ExpiresAt:       mwm.TimeManager.Now().Add(time.Hour * 2).Round(0),
+		LocationName:    "Vancouver",
+		LocationRegion:  "British Columbia",
+		LocationCountry: "Canada",
 		AstroData: AstroData{
 			Sunrise:          "05:07 AM",
 			Sunset:           "09:22 PM",
@@ -33,7 +36,7 @@ func (mwm *MockWeatherManager) GetAstro(location string) (AstroResponse, error) 
 
 type MockTimeManager struct {
 	NowFunc               func() time.Time
-	ComputeExpiryTimeFunc func(localTime string) (time.Time, error)
+	ComputeExpiryTimeFunc func(localTime string, timeZoneID string) (time.Time, error)
 }
 
 func (tm *MockTimeManager) Now() time.Time {
@@ -43,18 +46,29 @@ func (tm *MockTimeManager) Now() time.Time {
 	return time.Now()
 }
 
-func (tm *MockTimeManager) ComputeExpiryTime(localTime string) (time.Time, error) {
+func (tm *MockTimeManager) ComputeExpiryTime(localTime string, timeZoneID string) (time.Time, error) {
 	if tm.ComputeExpiryTimeFunc != nil {
-		return tm.ComputeExpiryTimeFunc(localTime)
+		return tm.ComputeExpiryTimeFunc(localTime, timeZoneID)
 	}
-	// default logic if ComputeExpiryTimeFunc is not set
-	lt, err := time.Parse("2006-01-02 15:04", localTime)
+
+	// Get the location for the given time zone
+	loc, err := time.LoadLocation(timeZoneID)
 	if err != nil {
 		return time.Time{}, err
 	}
 
-	nextDay := lt.AddDate(0, 0, 1)
-	expiryTime := time.Date(nextDay.Year(), nextDay.Month(), nextDay.Day(), 0, 0, 0, 0, lt.Location())
+	// Parse the local time using the location
+	parsedTime, err := time.ParseInLocation("2006-01-02 15:04", localTime, loc)
+	if err != nil {
+		return time.Time{}, err
+	}
+
+	// Compute the expiry time
+	nextDay := parsedTime.AddDate(0, 0, 1)
+	expiryTime := time.Date(nextDay.Year(), nextDay.Month(), nextDay.Day(), 0, 0, 0, 0, loc)
+
+	// log.Println(parsedTime.Format("2006-01-02 15:04"))
+	// log.Println(expiryTime.Format("2006-01-02 15:04"))
 
 	return expiryTime, nil
 }
@@ -138,6 +152,11 @@ func TestWeatherStackManager_GetAstro(t *testing.T) {
 	server := createMockServer(func() {})
 	defer server.Close()
 
+	successLocation, err := time.LoadLocation("America/Los_Angeles")
+	if err != nil {
+		panic(err)
+	}
+
 	tests := []struct {
 		name    string
 		fields  fields
@@ -155,15 +174,22 @@ func TestWeatherStackManager_GetAstro(t *testing.T) {
 						// return a fixed time for this test case
 						return time.Date(2023, 6, 22, 12, 35, 30, 0, time.UTC)
 					},
-					ComputeExpiryTimeFunc: func(localTime string) (time.Time, error) {
-						// Compute the expiry time based on localTime
-						lt, err := time.Parse("2006-01-02 15:04", localTime)
+					ComputeExpiryTimeFunc: func(localTime string, timeZoneID string) (time.Time, error) {
+						// Get the location for the given time zone
+						loc, err := time.LoadLocation(timeZoneID)
 						if err != nil {
 							return time.Time{}, err
 						}
 
-						nextDay := lt.AddDate(0, 0, 1)
-						expiryTime := time.Date(nextDay.Year(), nextDay.Month(), nextDay.Day(), 0, 0, 0, 0, lt.Location())
+						// Parse the local time using the location
+						parsedTime, err := time.ParseInLocation("2006-01-02 15:04", localTime, loc)
+						if err != nil {
+							return time.Time{}, err
+						}
+
+						// Compute the expiry time
+						nextDay := parsedTime.AddDate(0, 0, 1)
+						expiryTime := time.Date(nextDay.Year(), nextDay.Month(), nextDay.Day(), 0, 0, 0, 0, loc)
 
 						return expiryTime, nil
 					},
@@ -173,8 +199,11 @@ func TestWeatherStackManager_GetAstro(t *testing.T) {
 				location: "Vancouver",
 			},
 			want: AstroResponse{
-				Date:      "2023-06-20",
-				ExpiresAt: time.Date(2023, 6, 22, 0, 0, 0, 0, time.UTC), // based on the MockTimeManager implementation
+				Date:            "2023-06-20",
+				LocationName:    "Vancouver",
+				LocationRegion:  "British Columbia",
+				LocationCountry: "Canada",
+				ExpiresAt:       time.Date(2023, 6, 22, 0, 0, 0, 0, successLocation), // based on the MockTimeManager implementation
 				AstroData: AstroData{
 					Sunrise:          "05:07 AM",
 					Sunset:           "09:22 PM",
@@ -270,12 +299,30 @@ func TestWeatherStackManager_GetAstro(t *testing.T) {
 				TimeManager: tt.fields.TimeManager,
 			}
 			got, err := wsm.GetAstro(tt.args.location)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("WeatherStackManager.GetForecast() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("WeatherStackManager.GetForecast() = %v, want %v", got, tt.want)
+			if err != nil {
+				if (err != nil) != tt.wantErr {
+					t.Errorf("WeatherStackManager.GetAstro() error = %v, wantErr %v", err, tt.wantErr)
+				}
+			} else {
+				if !reflect.DeepEqual(got.Date, tt.want.Date) {
+					t.Errorf("Date = %v, want %v", got.Date, tt.want.Date)
+				}
+				if !reflect.DeepEqual(got.LocationName, tt.want.LocationName) {
+					t.Errorf("LocationName = %v, want %v", got.LocationName, tt.want.LocationName)
+				}
+				if !reflect.DeepEqual(got.LocationRegion, tt.want.LocationRegion) {
+					t.Errorf("LocationRegion = %v, want %v", got.LocationRegion, tt.want.LocationRegion)
+				}
+				if !reflect.DeepEqual(got.LocationCountry, tt.want.LocationCountry) {
+					t.Errorf("LocationCountry = %v, want %v", got.LocationCountry, tt.want.LocationCountry)
+				}
+				if !reflect.DeepEqual(got.AstroData, tt.want.AstroData) {
+					t.Errorf("AstroData = %v, want %v", got.AstroData, tt.want.AstroData)
+					// If AstroData comparison fails, you can add comparisons for its subfields as well
+				}
+				if !got.ExpiresAt.Round(0).Equal(tt.want.ExpiresAt.Round(0)) {
+					t.Errorf("ExpiresAt = %v, want %v", got.ExpiresAt, tt.want.ExpiresAt)
+				}
 			}
 		})
 	}
@@ -289,6 +336,11 @@ func TestWeatherStackManager_CachingBehavior(t *testing.T) {
 	// create a new server serving the appropriate mock JSON - passing a function to increment the request count
 	server := createMockServer(func() { requestCount++ })
 	defer server.Close()
+
+	successLocation, err := time.LoadLocation("America/Los_Angeles")
+	if err != nil {
+		panic(err)
+	}
 
 	fixedTime := time.Date(2023, 6, 20, 22, 00, 00, 0, time.UTC)
 
@@ -334,7 +386,7 @@ func TestWeatherStackManager_CachingBehavior(t *testing.T) {
 
 		t.Run("CacheCheck", func(t *testing.T) {
 			// Verify the cache directly
-			cacheKey := fmt.Sprintf("Vancouver:%s", fixedTime.Format("2006-01-02"))
+			cacheKey := fmt.Sprintf("vancouver:%s", fixedTime.Format("2006-01-02"))
 			cachedData, found := wsm.Cache[cacheKey]
 			if !found {
 				t.Errorf("No data found in cache for key: %s", cacheKey)
@@ -342,8 +394,11 @@ func TestWeatherStackManager_CachingBehavior(t *testing.T) {
 
 			// Compare cachedAstro with the expected data
 			expectedAstro := AstroResponse{
-				Date:      "2023-06-20",
-				ExpiresAt: time.Date(2023, 6, 22, 0, 0, 0, 0, time.UTC), // based on the MockTimeManager implementation
+				Date:            "2023-06-20",
+				LocationName:    "Vancouver",
+				LocationRegion:  "British Columbia",
+				LocationCountry: "Canada",
+				ExpiresAt:       time.Date(2023, 6, 22, 0, 0, 0, 0, successLocation).Round(0), // based on the MockTimeManager implementation
 				AstroData: AstroData{
 					Sunrise:          "05:07 AM",
 					Sunset:           "09:22 PM",
@@ -353,9 +408,15 @@ func TestWeatherStackManager_CachingBehavior(t *testing.T) {
 					MoonIllumination: 3,
 				},
 			}
-			if !reflect.DeepEqual(cachedData, expectedAstro) {
+			if cachedData.Date != expectedAstro.Date ||
+				cachedData.LocationName != expectedAstro.LocationName ||
+				cachedData.LocationRegion != expectedAstro.LocationRegion ||
+				cachedData.LocationCountry != expectedAstro.LocationCountry ||
+				!reflect.DeepEqual(cachedData.AstroData, expectedAstro.AstroData) ||
+				!cachedData.ExpiresAt.Equal(expectedAstro.ExpiresAt) {
 				t.Errorf("Cached data is not as expected. Got %v, want %v", cachedData, expectedAstro)
 			}
+
 		})
 
 		// Teardown - reset the request counter
@@ -373,15 +434,22 @@ func TestWeatherStackManager_CachingBehavior(t *testing.T) {
 				NowFunc: func() time.Time {
 					return time.Now()
 				},
-				ComputeExpiryTimeFunc: func(localTime string) (time.Time, error) {
-					// Compute the expiry time based on localTime
-					lt, err := time.Parse("2006-01-02 15:04", localTime)
+				ComputeExpiryTimeFunc: func(localTime string, timeZoneID string) (time.Time, error) {
+					// Get the location for the given time zone
+					loc, err := time.LoadLocation(timeZoneID)
 					if err != nil {
 						return time.Time{}, err
 					}
 
-					nextDay := lt.AddDate(0, 0, 1)
-					expiryTime := time.Date(nextDay.Year(), nextDay.Month(), nextDay.Day(), 0, 0, 0, 0, time.UTC)
+					// Parse the local time using the location
+					parsedTime, err := time.ParseInLocation("2006-01-02 15:04", localTime, loc)
+					if err != nil {
+						return time.Time{}, err
+					}
+
+					// Compute the expiry time
+					nextDay := parsedTime.AddDate(0, 0, 1)
+					expiryTime := time.Date(nextDay.Year(), nextDay.Month(), nextDay.Day(), 0, 0, 0, 0, loc)
 
 					// Return a time in the past
 					return expiryTime.Add(-time.Hour), nil
@@ -429,22 +497,29 @@ func TestAstroHandler(t *testing.T) {
 				// return a fixed time for this test case
 				return time.Date(2023, 6, 27, 22, 00, 00, 0, time.UTC)
 			},
-			ComputeExpiryTimeFunc: func(localTime string) (time.Time, error) {
-				// Compute the expiry time based on localTime
-				lt, err := time.Parse("2006-01-02 15:04", localTime)
+			ComputeExpiryTimeFunc: func(localTime string, timeZoneID string) (time.Time, error) {
+				// Get the location for the given time zone
+				loc, err := time.LoadLocation(timeZoneID)
 				if err != nil {
 					return time.Time{}, err
 				}
 
-				nextDay := lt.AddDate(0, 0, 1)
-				expiryTime := time.Date(nextDay.Year(), nextDay.Month(), nextDay.Day(), 0, 0, 0, 0, time.UTC)
+				// Parse the local time using the location
+				parsedTime, err := time.ParseInLocation("2006-01-02 15:04", localTime, loc)
+				if err != nil {
+					return time.Time{}, err
+				}
+
+				// Compute the expiry time
+				nextDay := parsedTime.AddDate(0, 0, 1)
+				expiryTime := time.Date(nextDay.Year(), nextDay.Month(), nextDay.Day(), 0, 0, 0, 0, loc)
 
 				return expiryTime, nil
 			},
 		},
 	}
 
-	req, err := http.NewRequest("GET", "/astro?location=Vancouver&date=2023-06-20", nil)
+	req, err := http.NewRequest("GET", "/astro?location=Vancouver", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -457,7 +532,7 @@ func TestAstroHandler(t *testing.T) {
 		t.Errorf("handler returned wrong status code: got %v want %v", status, http.StatusOK)
 	}
 
-	expected := `{"date":"2023-06-27","astro":{"sunrise":"05:07 AM","sunset":"09:22 PM","moonrise":"06:58 AM","moonset":"11:52 PM","moon_phase":"Waxing Crescent","moon_illumination":3},"expires_at":"2023-06-28T00:00:00Z"}`
+	expected := `{"date":"2023-06-27","name":"Vancouver","region":"British Columbia","country":"Canada","astro":{"sunrise":"05:07 AM","sunset":"09:22 PM","moonrise":"06:58 AM","moonset":"11:52 PM","moon_phase":"Waxing Crescent","moon_illumination":3},"expires_at":"2023-06-28T00:00:00Z"}`
 	if rr.Body.String() != expected {
 		t.Errorf("handler returned unexpected body: got %v want %v", rr.Body.String(), expected)
 	}
