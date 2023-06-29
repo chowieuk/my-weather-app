@@ -25,6 +25,7 @@ function App() {
             </form>
             {data && (
                 <div>
+                    <p>{`Location: ${data.name}, ${data.region}, ${data.country}`}</p>
                     <p>{`Date: ${data.date}`}</p>
                     <p>{`Sunrise: ${data.astro.sunrise}`}</p>
                     <p>{`Sunset: ${data.astro.sunset}`}</p>
@@ -32,7 +33,7 @@ function App() {
                     <p>{`Moonset: ${data.astro.moonset}`}</p>
                     <p>{`Moon Phase: ${data.astro.moon_phase}`}</p>
                     <p>{`Moon Illumination: ${data.astro.moon_illumination}`}</p>
-                    <p>{`Expires at: ${data.expires_at}`}</p>
+                    {/* <p>{`Expires at: ${data.expires_at}`}</p> */}
                 </div>
             )}
         </div>

@@ -1,4 +1,7 @@
 export type AstroData = {
+    name: string;
+    region: string;
+    country: string;
     date: string;
     astro: {
         sunrise: string;
@@ -8,5 +11,5 @@ export type AstroData = {
         moon_phase: string;
         moon_illumination: number;
     };
-    expires_at: string;
+    // expires_at: string;
 };
