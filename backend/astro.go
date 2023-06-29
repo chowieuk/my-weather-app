@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/joho/godotenv"
+	"github.com/rs/cors"
 )
 
 type WeatherApiResponse struct {
@@ -223,12 +224,20 @@ func main() {
 		TimeManager: &DefaultTimeManager{},
 	}
 
+	mux := http.NewServeMux()
+
 	// Wrap the AstroHandler in a function that matches the expected signature
-	http.HandleFunc("/astro", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/astro", func(w http.ResponseWriter, r *http.Request) {
 		AstroHandler(w, r, &wsm)
 	})
+
+	// Applying CORS middleware to the mux
+	handler := cors.New(cors.Options{
+		AllowedOrigins: []string{"http://localhost:5173"}, // frontend default
+	}).Handler(mux)
+
 	host := "127.0.0.1"
 	port := "8080"
 	fmt.Printf("Server listening on %s port %s\n", host, port)
-	log.Fatal(http.ListenAndServe(fmt.Sprintf("%s:%s", host, port), nil))
+	log.Fatal(http.ListenAndServe(fmt.Sprintf("%s:%s", host, port), handler))
 }
