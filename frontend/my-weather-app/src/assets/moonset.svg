@@ -1,0 +1,13 @@
+<svg version="1.2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 150" width="200" height="150">
+	<title>moonset-svg</title>
+	<style>
+		.s0 { fill: #ffffff;stroke: #000000;stroke-width: 6 } 
+		.s1 { fill: #000000;stroke: #000000;stroke-width: 6 } 
+		.s2 { fill: #000000;stroke: #000000;stroke-width: 5 } 
+	</style>
+	<g id="layer1">
+		<path id="Shape 1" class="s0" d="m76.8 110c-5.4 0.1-8.9-0.1-12.1-0.5-1.9-0.2-2.1-1.4-4.4-3.6-11.3-11.1-13.9-24-9.6-39.5 6.5-23.4 32.2-36.7 57.6-29.7 25.3 7-20.7 13-27.2 36.5-3.3 11.8 3.1 21 7.9 31.1 2 4.1 1.1 4.7 0.6 5.2-0.8 0.8-3.3 0.4-12.8 0.5z"/>
+		<path id="path4140" class="s1" d="m15.2 110.1h134.3"/>
+		<path id="path4189" class="s2" d="m180.4 31.3h-20.2-20.2l10.1 11 10.1 11.1 10.1-11.1z"/>
+	</g>
+</svg>

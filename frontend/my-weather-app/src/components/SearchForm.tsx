@@ -11,7 +11,10 @@ export const SearchForm: React.FC<SearchFormProps> = ({
     setLocation,
     onSubmit,
 }) => (
-    <form onSubmit={onSubmit}>
+    <form
+        style={{ flexBasis: "100%", textAlign: "center" }}
+        onSubmit={onSubmit}
+    >
         <input
             value={location}
             onChange={(e) => setLocation(e.target.value)}

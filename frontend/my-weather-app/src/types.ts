@@ -12,6 +12,16 @@ export type AstroDetails = {
     sunset: string;
     moonrise: string;
     moonset: string;
-    moon_phase: string;
+    moon_phase: MoonPhase;
     moon_illumination: number;
 };
+
+export type MoonPhase =
+    | "New Moon"
+    | "Waxing Crescent"
+    | "First Quarter"
+    | "Waxing Gibbous"
+    | "Full Moon"
+    | "Waning Gibbous"
+    | "Last Quarter"
+    | "Waning Crescent";

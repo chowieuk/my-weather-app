@@ -10,4 +10,8 @@ export const LocationInfo: React.FC<LocationInfoProps> = ({
     name,
     region,
     country,
-}) => <p>{`Location: ${name}, ${region}, ${country}`}</p>;
+}) => (
+    <p
+        style={{ flexBasis: "100%", textAlign: "center" }}
+    >{`${name}, ${region}, ${country}`}</p>
+);
