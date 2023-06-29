@@ -1,7 +1,8 @@
-// src/App.tsx
+// App.tsx
 import React, { useState } from "react";
 import { AstroData } from "./types";
 import { getAstroData } from "./utils";
+import { SearchForm, AstroCard } from "./components";
 
 function App() {
     const [location, setLocation] = useState("");
@@ -15,27 +16,12 @@ function App() {
 
     return (
         <div className="App">
-            <form onSubmit={handleSubmit}>
-                <input
-                    value={location}
-                    onChange={(e) => setLocation(e.target.value)}
-                    placeholder="Enter location"
-                />
-                <button type="submit">Submit</button>
-            </form>
-            {data && (
-                <div>
-                    <p>{`Location: ${data.name}, ${data.region}, ${data.country}`}</p>
-                    <p>{`Date: ${data.date}`}</p>
-                    <p>{`Sunrise: ${data.astro.sunrise}`}</p>
-                    <p>{`Sunset: ${data.astro.sunset}`}</p>
-                    <p>{`Moonrise: ${data.astro.moonrise}`}</p>
-                    <p>{`Moonset: ${data.astro.moonset}`}</p>
-                    <p>{`Moon Phase: ${data.astro.moon_phase}`}</p>
-                    <p>{`Moon Illumination: ${data.astro.moon_illumination}`}</p>
-                    {/* <p>{`Expires at: ${data.expires_at}`}</p> */}
-                </div>
-            )}
+            <SearchForm
+                location={location}
+                setLocation={setLocation}
+                onSubmit={handleSubmit}
+            />
+            {data && <AstroCard data={data} />}
         </div>
     );
 }
