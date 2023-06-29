@@ -24,6 +24,9 @@
 # Go workspace file
 go.work
 
+# Debug output
+__debug_bin
+
 # TypeScript gitignore
 
 node_modules/
