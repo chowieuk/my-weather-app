@@ -1,0 +1,9 @@
+<svg version="1.2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 150 150" width="150" height="150">
+	<title>moonrise-svg</title>
+	<style>
+		.s0 { fill: #ffffff;stroke: #000000;stroke-width: 2 } 
+		.s1 { fill: #000000 } 
+	</style>
+	<path id="Moon" class="s0" d="m75 26.7c26.6 0 48.2 21.6 48.2 48.2-0.1 26.6-21.6 48.1-48.2 48.1-26.5 0-48.1-21.5-48.2-48.1-0.1-26.4 21.6-48.1 48.2-48.2z"/>
+	<path id="Shadow" fill-rule="evenodd" class="s1" d="m75 26.9c35.2 24.1 28.4 79 3.1 94.6-5.5 3.4 10.8 0.4 19-4 45.9-24.9 25-92.4-22.1-90.6z"/>
+</svg>
