@@ -220,12 +220,15 @@ func main() {
 		BaseUrl:     "http://api.weatherstack.com",
 		WEATHER_KEY: WEATHER_KEY,
 		Cache:       make(map[string]AstroResponse),
+		TimeManager: &DefaultTimeManager{},
 	}
 
 	// Wrap the AstroHandler in a function that matches the expected signature
 	http.HandleFunc("/astro", func(w http.ResponseWriter, r *http.Request) {
 		AstroHandler(w, r, &wsm)
 	})
-	fmt.Println("Server listening on port 8080")
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	host := "127.0.0.1"
+	port := "8080"
+	fmt.Printf("Server listening on %s port %s\n", host, port)
+	log.Fatal(http.ListenAndServe(fmt.Sprintf("%s:%s", host, port), nil))
 }
